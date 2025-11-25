@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jump Rope</title>
+<style>
+:root {
+    --error-hand: #FF6B6B;
+    --error-foot: #54A0FF;
+    --bg: #FEF9E7;
+    --text: #333;
+}
+body {
+    font-family: "Comic Sans MS","Chalkboard SE",sans-serif;
+    background-color: var(--bg);
+    color: var(--text);
+    margin:0;
+    padding:20px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    min-height:100vh;
+    overflow-x:hidden;
+}
+h1 {
+    color:#FF6B6B;
+    text-shadow:2px 2px 0px #Feca57;
+    margin-bottom:10px;
+    font-size:2rem;
+}
+.score-card {
+    background:white;
+    border-radius:20px;
+    padding:20px;
+    width:90%;
+    max-width:400px;
+    text-align:center;
+    box-shadow:0 8px 0px rgba(0,0,0,0.1);
+    margin-bottom:20px;
+    border:3px solid #333;
+}
+.total-count {
+    font-size:4rem;
+    font-weight:bold;
+    color: #FFA500;
+    display:block;
+    margin:10px 0;
+}
+.stats-row {
+    display:flex;
+    justify-content:space-around;
+    margin-top:10px;
+    font-size:0.9rem;
+    color:#666;
+}
+.input-section {
+    background:#fff;
+    padding:15px;
+    border-radius:15px;
+    border:2px solid #ddd;
+    margin-bottom:20px;
+    display:flex;
+    align-items:center;
+    gap:10px;
+    width:90%;
+    max-width:400px;
+}
+input[type="number"] {
+    width:80px;
+    font-size:1.5rem;
+    padding:5px;
+    border-radius:10px;
+    border:2px solid #FFA500;
+    text-align:center;
+    outline:none;
+}
+.controls {
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:15px;
+    width:95%;
+    max-width:400px;
+}
+.btn {
+    border:none;
+    padding:15px;
+    border-radius:15px;
+    font-size:1.1rem;
+    font-weight:bold;
+    color:white;
+    cursor:pointer;
+    transition: transform 0.1s;
+    box-shadow:0 5px 0 rgba(0,0,0,0.2);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:5px;
+    height:120px;
+}
+.btn:active { transform: translateY(5px); box-shadow:none; }
+.btn-hand { background-color: var(--error-hand); }
+.btn-foot { background-color: var(--error-foot); }
+.history-list { margin-top:20px; width:90%; max-width:400px; }
+.history-item {
+    background:white;
+    padding:10px;
+    margin-bottom:8px;
+    border-radius:10px;
+    display:flex;
+    justify-content:space-between;
+    border-bottom:2px solid #eee;
+    animation: popIn 0.3s ease-out;
+}
+@keyframes popIn { from{transform:scale(0.5);opacity:0;} to{transform:scale(1);opacity:1;} }
+@keyframes jump { 0%{transform:translateY(0);} 50%{transform:translateY(-20px);} 100%{transform:translateY(0);} }
+.anim-jump { animation: jump 0.3s; }
+.confetti {
+    position: fixed;
+    width: 10px;
+    height: 10px;
+    background-color: red;
+    animation: fall linear forwards;
+    z-index: 999;
+    pointer-events: none;
+}
+@keyframes fall { to { transform: translateY(100vh) rotate(720deg); } }
+.reset-btn {
+    margin-top:20px;
+    color:#999;
+    background:none;
+    border:none;
+    text-decoration:underline;
+    font-size:0.8rem;
+}
+.chart-container {
+    width:90%;
+    max-width:400px;
+    height:200px;
+    margin-bottom:15px;
+    background:white;
+    border-radius:10px;
+    padding:5px;
+    box-shadow:0 3px 5px rgba(0,0,0,0.1);
+}
+</style>
+</head>
+<body>
+
+<h1>
+    <img src="jump.png" alt="跳绳兔子" 
+         style="width:100px;height:100px;vertical-align:middle;margin-right:5px;border-radius:50%;object-fit:cover;">
+    Jump Rope
+</h1>
+
+<div class="score-card">
+    <div>今日总次数</div>
+    <span id="totalDisplay" class="total-count">0</span>
+    <div class="stats-row">
+        <span style="color:var(--error-hand)">👋 手慢: <b id="handCount">0</b></span>
+        <span style="color:var(--error-foot)">🦶 绊脚: <b id="footCount">0</b></span>
+    </div>
+</div>
+
+<div class="input-section">
+    <label>这次跳了多少个？</label>
+    <input type="number" id="currentInput" value="50" inputmode="numeric">
+</div>
+
+<div class="controls">
+    <button class="btn btn-hand" onclick="record('hand')">👋 手慢了</button>
+    <button class="btn btn-foot" onclick="record('foot')">🦶 绊脚了</button>
+</div>
+
+<div class="chart-container">
+    <canvas id="trendChart"></canvas>
+</div>
+
+<div class="history-list" id="historyList"></div>
+<button class="reset-btn" onclick="resetData()">重置今日数据</button>
+
+<!-- 音频文件 -->
+<audio id="cheer1" src="cheer1.mp3"></audio>
+<audio id="cheer2" src="cheer2.mp3"></audio>
+<audio id="cheer3" src="cheer3.mp3"></audio>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+let data={total:0,handErrors:0,footErrors:0,history:[]};
+if(localStorage.getItem('jumpData')) data=JSON.parse(localStorage.getItem('jumpData'));
+
+const ctx=document.getElementById('trendChart').getContext('2d');
+let trendChart=new Chart(ctx,{
+    type:'line',
+    data:{
+        labels:[],
+        datasets:[{
+            label:'单次跳绳次数',
+            data:[],
+            borderColor:'#000',
+            backgroundColor:'#000',
+            fill:false,
+            pointRadius:6,
+            pointBackgroundColor:[],
+            tension:0.3,
+            segment:{
+                borderColor:ctx=>{
+                    const idx=ctx.p0DataIndex;
+                    const icon=data.history[idx].icon;
+                    return icon==='👋' ? '#FF6B6B' : '#54A0FF';
+                }
+            }
+        }]
+    },
+    options:{
+        responsive:true,
+        maintainAspectRatio:false,
+        plugins:{legend:{display:false}},
+        scales:{
+            x:{
+                ticks:{
+                    font:{size:10},
+                    callback:function(value){
+                        let label=this.getLabelForValue(value);
+                        let parts=label.split(' ');
+                        let dateParts=parts[0].split('/');
+                        let monthDay=dateParts[1]+'/'+dateParts[2];
+                        let time=parts[1].slice(0,5);
+                        return monthDay+' '+time;
+                    }
+                }
+            },
+            y:{beginAtZero:true}
+        }
+    }
+});
+
+// --- 工具函数 ---
+function speak(text){
+    const s=window.speechSynthesis; 
+    const u=new SpeechSynthesisUtterance(text); 
+    u.lang='zh-CN'; 
+    u.rate=1.1; 
+    u.pitch=1.3; 
+    s.speak(u);
+}
+
+function randomPraise(){
+    const texts=["太棒了！","太酷啦！","顶呱呱！","厉害！","继续加油！"]; 
+    speak(texts[Math.floor(Math.random()*texts.length)]);
+}
+
+// 播放喝彩音效
+function playCheerSound(){
+    const choice = Math.floor(Math.random()*3);
+    const audio = document.getElementById('cheer' + (choice+1));
+    if(audio){ audio.currentTime=0; audio.play(); }
+}
+
+// 彩带动画
+function triggerConfetti(){
+    const colors=['#ff0000','#00ff00','#0000ff','#ffff00','#ff00ff'];
+    for(let i=0;i<50;i++){
+        const c=document.createElement('div');
+        c.classList.add('confetti');
+        c.style.left=Math.random()*100+'vw';
+        c.style.top='-10px';
+        c.style.backgroundColor=colors[Math.floor(Math.random()*colors.length)];
+        c.style.animationDuration=(Math.random()*2+1)+'s';
+        document.body.appendChild(c);
+        setTimeout(()=>c.remove(),3000);
+    }
+}
+
+function saveData(){localStorage.setItem('jumpData',JSON.stringify(data));}
+
+function updateUI(){
+    document.getElementById('totalDisplay').innerText=data.total;
+    document.getElementById('handCount').innerText=data.handErrors;
+    document.getElementById('footCount').innerText=data.footErrors;
+    const list=document.getElementById('historyList'); 
+    list.innerHTML='';
+    const grouped={};
+    data.history.forEach(item=>{ if(!grouped[item.date]) grouped[item.date]=[]; grouped[item.date].push(item); });
+    for(const date in grouped){
+        const dateHeader=document.createElement('div');
+        dateHeader.style.fontWeight='bold'; dateHeader.style.marginTop='10px';
+        dateHeader.textContent=date;
+        list.appendChild(dateHeader);
+        grouped[date].forEach(item=>{
+            const div=document.createElement('div');
+            div.className='history-item';
+            div.innerHTML=`<span>${item.icon} ${item.text}</span><span style="color:#999;font-size:0.8rem;">${item.time}</span>`;
+            list.appendChild(div);
+        });
+    }
+}
+
+function record(type){
+    const input=document.getElementById('currentInput');
+    const count=parseInt(input.value)||0;
+    if(count<=0){alert("请输入跳绳次数！");return;}
+    data.total+=count;
+
+    // 音效与动画
+    triggerConfetti();
+    playCheerSound();
+    randomPraise();
+
+    let logText='', icon='';
+    if(type==='hand'){data.handErrors++; logText=`跳了${count}个，手慢`; icon="👋"; speak("这次是手慢了！");}
+    if(type==='foot'){data.footErrors++; logText=`跳了${count}个，绊脚`; icon="🦶"; speak("这次是绊脚了！");}
+
+    const now=new Date();
+    const timeLabel=now.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    const dateLabel=now.toLocaleDateString();
+    data.history.unshift({date:dateLabel, time:timeLabel, text:logText, icon:icon});
+    saveData(); updateUI();
+
+    // 更新折线图
+    const chartLabel = dateLabel + ' ' + timeLabel;
+    trendChart.data.labels.push(chartLabel);
+    trendChart.data.datasets[0].data.push(count);
+    trendChart.data.datasets[0].pointBackgroundColor.push(type==='hand' ? '#FF6B6B' : '#54A0FF');
+    trendChart.update();
+
+    const totalEl=document.getElementById('totalDisplay'); 
+    totalEl.classList.remove('anim-jump'); void totalEl.offsetWidth; totalEl.classList.add('anim-jump');
+}
+
+function resetData(){
+    if(confirm("确定清空数据吗？")){
+        data={total:0,handErrors:0,footErrors:0,history:[]};
+        saveData(); updateUI();
+        trendChart.data.labels=[]; 
+        trendChart.data.datasets.forEach(ds=>ds.data=[]); 
+        trendChart.data.datasets[0].pointBackgroundColor=[];
+        trendChart.update();
+    }
+}
+
+updateUI();
+</script>
+</body>
+</html>
